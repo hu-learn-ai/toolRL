@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# 模型权重与训练产物（体积大，可复现生成）
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+wandb/
+checkpoints/
+runs/
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+.env
+.pytest_cache/
+.ruff_cache/
+data_out/
+.pytest_tmp/

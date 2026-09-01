@@ -1,0 +1,99 @@
+"""评测用模型加载器（design_zh.md §5.3）。
+
+把本地 checkpoint（基座 / SFT / GRPO）包装成 ``Teacher``，供 ``evaluate_tasks`` 复用
+``data.synthesize_one`` 的 rollout 闭环。教师组（§5.3 上限参照）直接用 ``GoldTeacher``，
+不经过此模块。
+
+GPU 侧依赖（torch/transformers）延迟到 ``HuggingFaceTeacher.generate`` 内导入，
+模块顶层无 torch，保证无 GPU 环境也能 import 并单测 benchmark/runner/report。
+解码参数固定 ``temperature=0.7, top_p=0.9``（§5.3 口径），随机种子由调用方通过
+``model_kwargs["seed"]`` 传入以保证可复现。
+"""
+
+from __future__ import annotations
+
+from data.teacher import Teacher
+
+
+class HuggingFaceTeacher(Teacher):
+    """把 HuggingFace 因果模型包装成 Teacher：``generate(messages)`` 返回原始文本。"""
+
+    def __init__(
+        self,
+        model_name_or_path: str,
+        temperature: float = 0.7,
+        top_p: float = 0.9,
+        max_new_tokens: int = 1024,
+        seed: int | None = None,
+    ) -> None:
+        self.model_name = model_name_or_path
+        self.temperature = temperature
+        self.top_p = top_p
+        self.max_new_tokens = max_new_tokens
+        self.seed = seed
+        self._model = None
+        self._tokenizer = None
+
+    def _load(self) -> None:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name, trust_remote_code=True
+        )
+        if self._tokenizer.pad_token_id is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+        self._model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+        self._model.eval()
+
+    def generate(self, messages: list[dict]) -> str:
+        import torch
+
+        if self._model is None:
+            self._load()
+        prompt = self._tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self._tokenizer(prompt, return_tensors="pt").to(self._model.device)
+        gen_kwargs: dict = dict(
+            max_new_tokens=self.max_new_tokens,
+            temperature=self.temperature,
+            top_p=self.top_p,
+            do_sample=True,
+        )
+        if self.seed is not None:
+            gen_kwargs["generator"] = torch.Generator(
+                device=self._model.device
+            ).manual_seed(self.seed)
+        out = self._model.generate(**inputs, **gen_kwargs)
+        new = out[0][inputs["input_ids"].shape[-1]:]
+        return self._tokenizer.decode(new, skip_special_tokens=True)
+
+
+def load_model_factory(
+    model_name_or_path: str,
+    temperature: float = 0.7,
+    top_p: float = 0.9,
+    max_new_tokens: int = 1024,
+    seed: int | None = None,
+):
+    """返回一个 ``TeacherFactory``（``Task -> HuggingFaceTeacher``），供评测复用。"""
+
+    def factory(task):
+        return HuggingFaceTeacher(
+            model_name_or_path,
+            temperature=temperature,
+            top_p=top_p,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+        )
+
+    return factory
+
+
+__all__ = ["HuggingFaceTeacher", "load_model_factory"]

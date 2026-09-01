@@ -1,0 +1,34 @@
+# 依赖分阶段引入：当前只装跑通 envs 所需的轻量包。
+# torch / verl / trl / vllm 等 GPU 侧依赖在进入 W3（SFT）时再补（design_zh.md §7.2）。
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toolrl-lite"
+version = "0.1.0"
+description = "把 Qwen3 小模型训练成可靠的工具调用 Agent —— SFT + GRPO 全链路"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+env = ["fastapi", "uvicorn"]
+synth = ["openai"]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools.packages.find]
+include = ["envs*", "data*", "train*", "eval*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+

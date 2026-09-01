@@ -1,0 +1,1 @@
+"""训练（design_zh.md §4）：SFT 冷启动 + GRPO 强化学习。"""
