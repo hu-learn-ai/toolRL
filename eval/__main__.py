@@ -51,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default="eval_out/report.md", help="报告输出路径")
     p.add_argument("--mock", action="store_true",
                    help="无 GPU 冒烟：用 BadTeacher 顶替三组模型")
+    p.add_argument("--trust-remote-code", action="store_true",
+                   help="信任模型仓库的自定义建模代码（Qwen3 官方权重需开启；有任意代码执行风险）")
     args = p.parse_args(argv)
 
     groups: dict = {}
@@ -60,11 +62,17 @@ def main(argv: list[str] | None = None) -> int:
             groups[name] = bad
     else:
         if args.base:
-            groups["基座"] = load_model_factory(args.base, seed=args.seed)
+            groups["基座"] = load_model_factory(
+                args.base, seed=args.seed, trust_remote_code=args.trust_remote_code
+            )
         if args.sft:
-            groups["SFT"] = load_model_factory(args.sft, seed=args.seed)
+            groups["SFT"] = load_model_factory(
+                args.sft, seed=args.seed, trust_remote_code=args.trust_remote_code
+            )
         if args.grpo:
-            groups["GRPO"] = load_model_factory(args.grpo, seed=args.seed)
+            groups["GRPO"] = load_model_factory(
+                args.grpo, seed=args.seed, trust_remote_code=args.trust_remote_code
+            )
     if args.teacher:
         groups["教师"] = GoldTeacher  # GoldTeacher 本身即 TeacherFactory(Task -> GoldTeacher)
 

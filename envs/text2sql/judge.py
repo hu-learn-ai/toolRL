@@ -12,7 +12,7 @@ R_format 复用 Qwen3 格式判定（parse_turn）；R_correct / R_answer 都映
 from __future__ import annotations
 
 from ..api_sandbox.common import validate_params
-from ..api_sandbox.judge import parse_turn
+from ..api_sandbox.judge import parse_turn, raw_of, step_penalty
 from ..base_env import JudgeResult
 from ..task_schema import Task
 from .db import Database, build_database
@@ -50,14 +50,6 @@ def results_equal(cols_a, rows_a, cols_b, rows_b, order_matters: bool = False) -
     return sorted(a) == sorted(b)
 
 
-def _raw_of(item) -> str:
-    if isinstance(item, str):
-        return item
-    if isinstance(item, dict):
-        return item.get("raw", "")
-    return ""
-
-
 def _result_equality(db: Database, gold_sql: str, model_sql: str, order_matters: bool) -> float:
     try:
         gold_cols, gold_rows = db.execute(gold_sql)
@@ -73,7 +65,7 @@ def _result_equality(db: Database, gold_sql: str, model_sql: str, order_matters:
 def judge(task: Task, trajectory: list, db: Database | None = None) -> JudgeResult:
     if db is None:
         db = build_database(task.meta.get("db", "ecommerce"))
-    turns = [_raw_of(x) for x in trajectory]
+    turns = [raw_of(x) for x in trajectory]
     parsed = [parse_turn(t) for t in turns]
     n = len(turns)
 
@@ -94,14 +86,14 @@ def judge(task: Task, trajectory: list, db: Database | None = None) -> JudgeResu
     r_format = 1.0 if format_ok else 0.0
 
     # R_correct / R_answer：执行最后一条 SQL，与 gold 结果集比对
-    gold_sql = task.gold.calls[0].params["query"]
+    gold_sql = task.gold.calls[0].params["query"] if task.gold.calls else ""
     model_sql = sql_turns[-1] if sql_turns else ""
     order_matters = task.category == "order_limit"
     r_correct = _result_equality(db, gold_sql, model_sql, order_matters)
     r_answer = r_correct
 
     # R_steps：步数 = 助手回合数
-    r_steps = max(0, n - task.min_steps) / task.max_steps
+    r_steps = step_penalty(n, task)
 
     success = r_format == 1.0 and r_correct == 1.0
     # 参数正确率（§5.2）：sql.execute 只有一个 "query" 参数，结果集一致即参数正确。

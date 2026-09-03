@@ -25,6 +25,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--num-prompts", type=int, default=128)
     p.add_argument("--max-steps", type=int, default=500)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--trust-remote-code", action="store_true",
+                   help="信任模型仓库的自定义建模代码（Qwen3 官方权重需开启；有任意代码执行风险）")
     args = p.parse_args(argv)
 
     cfg = GRPOConfig(
@@ -38,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
         num_prompts=args.num_prompts,
         max_steps=args.max_steps,
         seed=args.seed,
+        trust_remote_code=args.trust_remote_code,
     )
     print(f"[grpo] model={cfg.model_name} G={cfg.group_size} lr={cfg.lr} "
           f"beta={cfg.beta} eps={cfg.epsilon} data={cfg.data_path}")

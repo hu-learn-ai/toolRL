@@ -136,7 +136,13 @@ def _extract_facts(text: str) -> set[str]:
 # ---------------------------------------------------------------------------
 
 
-def _raw_of(item) -> str:
+# R_correct 的组成权重：0.5·工具选择 + 0.5·参数正确（§2.2 分级给分）
+TOOL_WEIGHT = 0.5
+PARAM_WEIGHT = 0.5
+
+
+def raw_of(item) -> str:
+    """轨迹元素 → 原始文本：兼容 ``str`` 与 ``{"raw": str}`` 两种形态。"""
     if isinstance(item, str):
         return item
     if isinstance(item, dict):
@@ -144,19 +150,21 @@ def _raw_of(item) -> str:
     return ""
 
 
+def step_penalty(n: int, task: Task) -> float:
+    """R_steps 步数惩罚：超过 min_steps 的步数按 max_steps 归一化（§2.4）。"""
+    return max(0, n - task.min_steps) / task.max_steps
+
+
 def _schema_of(name: str) -> ToolParameterSchema | None:
     tool = TOOLS.get(name)
     return tool.parameters if tool is not None else None
 
 
-def judge(task: Task, trajectory: list) -> JudgeResult:
-    """程序化分级判定，返回四个原始分项 + success（不做加权）。"""
-    turns = [_raw_of(x) for x in trajectory]
-    parsed = [parse_turn(t) for t in turns]
-    n = len(turns)
+def _judge_format(parsed: list[ParsedTurn], n: int, answer_idx: list[int]) -> float:
+    """R_format：全程结构合法（标签配对 + JSON + 参数 schema）+ 恰好一个 answer 在末尾。
 
-    # R_format：全程合法（标签配对 + JSON + arguments 满足 schema），且恰好一个
-    # answer 位于最后一回合（§4.1）。空 arguments 骗格式分 → 不合规（§4.4）。
+    空 arguments 骗格式分 → 不合规（§4.4）。
+    """
     format_ok = True
     for p in parsed:
         if p.kind == "invalid":
@@ -165,21 +173,24 @@ def judge(task: Task, trajectory: list) -> JudgeResult:
             schema = _schema_of(p.tool_name)
             if schema is None or validate_params(p.arguments, schema) is not None:
                 format_ok = False
-    answer_idx = [i for i, p in enumerate(parsed) if p.kind == "answer"]
     if len(answer_idx) != 1 or answer_idx[0] != n - 1:
         format_ok = False
-    r_format = 1.0 if format_ok else 0.0
+    return 1.0 if format_ok else 0.0
 
-    # R_correct = 0.5·R_tool + 0.5·R_param（§2.2 分级给分）：
-    #   R_tool  按位置比对 API 名，多余调用经分母 max(G,M) 扣分；
-    #   R_param 只对位置匹配的步逐 key 比对参数值。
+
+def _judge_correct(task: Task, parsed: list[ParsedTurn]) -> tuple[float, int, int]:
+    """R_correct = TOOL_WEIGHT·R_tool + PARAM_WEIGHT·R_param（§2.2 分级给分）。
+
+    返回 (r_correct, matched_params, param_total)。R_tool 按位置比对 API 名，多余调用经
+    分母 max(gold,model) 扣分；R_param 只对位置匹配的步逐 key 比对参数值。
+    """
     gold_calls = task.gold.calls
     model_calls = [p for p in parsed if p.kind == "tool_call"]
-    G, M = len(gold_calls), len(model_calls)
+    gold_n, model_n = len(gold_calls), len(model_calls)
     matched_steps = 0
     matched_params = 0
     param_total = 0
-    for i in range(min(G, M)):
+    for i in range(min(gold_n, model_n)):
         if model_calls[i].tool_name != gold_calls[i].api:
             continue
         matched_steps += 1
@@ -188,24 +199,35 @@ def judge(task: Task, trajectory: list) -> JudgeResult:
             param_total += 1
             if k in model_params and _value_equal(model_params[k], gv):
                 matched_params += 1
-    r_tool = matched_steps / max(G, M) if max(G, M) > 0 else 0.0
+    r_tool = matched_steps / max(gold_n, model_n) if max(gold_n, model_n) > 0 else 0.0
     r_param = (
         matched_params / param_total
         if param_total > 0
-        else (1.0 if G > 0 and matched_steps == G else 0.0)
+        else (1.0 if gold_n > 0 and matched_steps == gold_n else 0.0)
     )
-    r_correct = 0.5 * r_tool + 0.5 * r_param
+    return TOOL_WEIGHT * r_tool + PARAM_WEIGHT * r_param, matched_params, param_total
 
-    # R_answer：gold 事实集 ⊆ 模型答案事实集（数字/编号/时间归一化后比对）。
-    if len(answer_idx) == 1:
-        gold_facts = _extract_facts(task.gold.answer)
-        model_facts = _extract_facts(parsed[answer_idx[0]].answer)
-        r_answer = 1.0 if gold_facts <= model_facts else 0.0
-    else:
-        r_answer = 0.0
 
-    # R_steps：步数惩罚（§2.4），步数 = 助手回合数 = 工具调用 + 最终回答。
-    r_steps = max(0, n - task.min_steps) / task.max_steps
+def _judge_answer(task: Task, parsed: list[ParsedTurn], answer_idx: list[int]) -> float:
+    """R_answer：gold 事实集 ⊆ 模型答案事实集（数字/编号/时间归一化后比对）。"""
+    if len(answer_idx) != 1:
+        return 0.0
+    gold_facts = _extract_facts(task.gold.answer)
+    model_facts = _extract_facts(parsed[answer_idx[0]].answer)
+    return 1.0 if gold_facts <= model_facts else 0.0
+
+
+def judge(task: Task, trajectory: list) -> JudgeResult:
+    """程序化分级判定，返回四个原始分项 + success（不做加权）。"""
+    turns = [raw_of(x) for x in trajectory]
+    parsed = [parse_turn(t) for t in turns]
+    n = len(turns)
+    answer_idx = [i for i, p in enumerate(parsed) if p.kind == "answer"]
+
+    r_format = _judge_format(parsed, n, answer_idx)
+    r_correct, matched_params, param_total = _judge_correct(task, parsed)
+    r_answer = _judge_answer(task, parsed, answer_idx)
+    r_steps = step_penalty(n, task)
 
     success = r_format == 1.0 and r_correct == 1.0 and r_answer == 1.0
     return JudgeResult(
@@ -219,4 +241,4 @@ def judge(task: Task, trajectory: list) -> JudgeResult:
     )
 
 
-__all__ = ["ParsedTurn", "parse_turn", "judge"]
+__all__ = ["ParsedTurn", "parse_turn", "raw_of", "step_penalty", "judge"]

@@ -17,6 +17,7 @@ from .synthesis import SynthesisResult
 def write_sft(results: Iterable[SynthesisResult], path: str | Path, append: bool = False) -> int:
     """把合成结果里的轨迹按行写入 JSONL，返回写入条数。"""
     path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     with path.open("a" if append else "w", encoding="utf-8") as f:
         for r in results:
@@ -28,6 +29,8 @@ def write_sft(results: Iterable[SynthesisResult], path: str | Path, append: bool
 def load_sft(path: str | Path) -> list[Trajectory]:
     """从 JSONL 读回 SFT 轨迹。"""
     path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"SFT 轨迹文件不存在：{path}（请先运行 scripts/gen_sft.py 合成）")
     out: list[Trajectory] = []
     with path.open("r", encoding="utf-8") as f:
         for line in f:
@@ -40,6 +43,7 @@ def load_sft(path: str | Path) -> list[Trajectory]:
 def write_rl_pool(tasks: Iterable[Task], path: str | Path, append: bool = False) -> int:
     """把任务写成 RL 采样池（每行一个完整 ``Task``，奖励函数据此判定）。"""
     path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     with path.open("a" if append else "w", encoding="utf-8") as f:
         for t in tasks:
@@ -51,6 +55,8 @@ def write_rl_pool(tasks: Iterable[Task], path: str | Path, append: bool = False)
 def load_rl_pool(path: str | Path) -> list[Task]:
     """从 RL 采样池 JSONL 读回完整任务。"""
     path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"RL 任务池文件不存在：{path}（请先运行 scripts/gen_tasks.py 或 scripts/gen_sft.py）")
     out: list[Task] = []
     with path.open("r", encoding="utf-8") as f:
         for line in f:

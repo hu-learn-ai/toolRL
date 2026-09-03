@@ -46,7 +46,8 @@ def main(argv: list[str] | None = None) -> int:
 
     total = args.n_per_env * len(envs)
     print(f"[gen_sft] teacher={cfg.model} 新增 {len(stats.results)} 条 SFT 轨迹，"
-          f"LLM 调用 {stats.calls} 次，续跑跳过 {stats.skipped}/{total}，输出目录 {args.out}")
+          f"LLM 调用 {stats.calls} 次，续跑跳过 {stats.skipped}/{total}，"
+          f"失败 {stats.failed} 条，输出目录 {args.out}")
     return 0
 
 

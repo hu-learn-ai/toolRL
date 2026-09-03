@@ -15,6 +15,10 @@ from ..task_schema import Gold, Task, ToolCall, ToolParameterSchema, ToolSpec
 from .db import Database
 from .schemas import CITIES, SCHEMA_NAMES
 
+# 步数口径（同 api_sandbox）：1 次 SQL 调用 + 最终回答 1 步，max 再留 3 步试错余量。
+_ANSWER_STEP = 1
+_MARGIN_STEPS = 3
+
 SQL_TOOL = "sql.execute"
 SQL_SPEC = ToolSpec(
     name=SQL_TOOL,
@@ -39,8 +43,9 @@ def _sql_task(task_id: str, category: str, instruction: str, sql: str, db: Datab
         instruction=instruction,
         tools=[SQL_SPEC],
         gold=Gold(calls=[ToolCall(api=SQL_TOOL, params={"query": sql})], answer=_render(cols, rows)),
-        max_steps=5,
-        min_steps=2,
+        # 步数 = 1 次 SQL 调用 + 最终回答 1 步，max 再留 _MARGIN_STEPS 步试错
+        max_steps=1 + _ANSWER_STEP + _MARGIN_STEPS,
+        min_steps=1 + _ANSWER_STEP,
         meta={"db": db.schema_name},
     )
 

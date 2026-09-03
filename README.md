@@ -82,9 +82,15 @@ python -m train.grpo --model checkpoints/sft --data data_out/rl_pool.jsonl
 python -m eval --mock --size 40 --out eval_out/report.md
 python -m eval --base Qwen/Qwen3-0.6B --sft checkpoints/sft --grpo checkpoints/grpo
 
-# 启动 Mock API 沙箱
-uvicorn envs.api_sandbox.server:app --port 8000
+# 启动 Mock API 沙箱（显式绑定 127.0.0.1，仅本机可访问）
+uvicorn envs.api_sandbox.server:app --host 127.0.0.1 --port 8000
+
+# 启动 MCP Server（stdio）
+python -m serving --mcp
 ```
+
+> ⚠️ **安全提示**：Mock API 沙箱（`envs/api_sandbox/server.py`）与 MCP Server（`python -m serving --mcp`）
+> **仅限本机训练/调试使用**，无任何鉴权与网络隔离，请勿绑定到公网地址（默认只监听 `127.0.0.1`）或将端口暴露到公网。
 
 ### 4. 测试
 

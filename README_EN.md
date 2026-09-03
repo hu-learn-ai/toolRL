@@ -85,9 +85,17 @@ python -m train.grpo --model checkpoints/sft --data data_out/rl_pool.jsonl
 python -m eval --mock --size 40 --out eval_out/report.md
 python -m eval --base Qwen/Qwen3-0.6B --sft checkpoints/sft --grpo checkpoints/grpo
 
-# Start the mock API sandbox
-uvicorn envs.api_sandbox.server:app --port 8000
+# Start the mock API sandbox (explicitly bind 127.0.0.1, local-only)
+uvicorn envs.api_sandbox.server:app --host 127.0.0.1 --port 8000
+
+# Start the MCP Server (stdio)
+python -m serving --mcp
 ```
+
+> ⚠️ **Security note**: the mock API sandbox (`envs/api_sandbox/server.py`) and the MCP Server
+> (`python -m serving --mcp`) are **for local training/debugging only**. They have no
+> authentication or network isolation — do not bind them to a public address (default listens
+> on `127.0.0.1`) or expose the port to the public internet.
 
 ### 4. Tests
 

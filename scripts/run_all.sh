@@ -7,7 +7,7 @@
 #   bash scripts/run_all.sh --skip synth        # 跳过指定阶段（可重复）
 #   bash scripts/run_all.sh --force             # 忽略已有产物，强制重跑
 #
-# 环境变量：OUT_DIR / N_PER_ENV / N_TASKS / SEED / PORT（均有默认值）
+# 环境变量：OUT_DIR / N_PER_ENV / N_TASKS / SEED / PORT / SERVE_MODE（均有默认值）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,6 +18,9 @@ N_PER_ENV="${N_PER_ENV:-2500}"
 N_TASKS="${N_TASKS:-400}"
 SEED="${SEED:-42}"
 PORT="${PORT:-8000}"
+
+# 导出给 bash -c 子阶段（eval/serve 在子 shell 内引用 $SEED 等）
+export OUT_DIR N_PER_ENV N_TASKS SEED PORT
 
 ONLY=""
 declare -a SKIP=()
@@ -57,7 +60,7 @@ run_stage() {
     local name="$1" artifact="$2"
     shift 2
     stage_enabled "$name" || { echo "[run_all] 跳过阶段 $name"; return 0; }
-    if [[ -n "$artifact" ]] && ! $FORCE && have "$artifact"; then
+    if [[ -n "$artifact" ]] && [[ "$FORCE" != "1" ]] && have "$artifact"; then
         echo "[run_all] $name 产物已存在，跳过（--force 重跑）: $artifact"
         return 0
     fi
@@ -70,10 +73,13 @@ echo "OUT_DIR=$OUT_DIR N_PER_ENV=$N_PER_ENV N_TASKS=$N_TASKS SEED=$SEED FORCE=$F
 
 run_stage env_check "" bash -c '
     python -c "import sys; assert sys.version_info >= (3, 10), \"需要 Python >= 3.10\""
-    python -c "import envs, data, train, eval; print(\"[env_check] 核心包导入 OK\")"
+    python -c "import envs, data, train, eval, serving; print(\"[env_check] 核心包导入 OK\")"
     python -c "import fastapi, uvicorn" 2>/dev/null \
         && echo "[env_check] fastapi/uvicorn OK" \
         || echo "[env_check] 提示: 未装 fastapi/uvicorn（可选：pip install -e .[env]）"
+    python -c "import mcp" 2>/dev/null \
+        && echo "[env_check] mcp OK" \
+        || echo "[env_check] 提示: 未装 mcp（可选：pip install -e .[mcp]）"
 '
 
 run_stage gen_tasks "$OUT_DIR/tasks.jsonl" \
@@ -100,6 +106,11 @@ run_stage eval "eval_out/report.md" bash -c '
 '
 
 run_stage serve "" bash -c '
-    echo "[run_all] 启动 Mock API 沙箱（MCP Server 尚未实现，serving/ 待开发）"
-    exec uvicorn envs.api_sandbox.server:app --port "$PORT"
+    if [[ "${SERVE_MODE:-demo}" == "mcp" ]]; then
+        echo "[run_all] 启动 MCP Server（stdio transport，阻塞，Ctrl-C 退出）"
+        exec python -m serving --mcp
+    else
+        echo "[run_all] 演示最小 Agent Runtime（GoldTeacher，§6.2）"
+        python -m serving --task-seed "$SEED" --task-idx 0
+    fi
 '

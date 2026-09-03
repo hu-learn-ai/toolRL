@@ -25,12 +25,15 @@ class HuggingFaceTeacher(Teacher):
         top_p: float = 0.9,
         max_new_tokens: int = 1024,
         seed: int | None = None,
+        trust_remote_code: bool = False,
     ) -> None:
         self.model_name = model_name_or_path
         self.temperature = temperature
         self.top_p = top_p
         self.max_new_tokens = max_new_tokens
         self.seed = seed
+        # 安全：是否信任模型仓库的自定义建模代码，默认关闭（见 _load 注释）
+        self.trust_remote_code = trust_remote_code
         self._model = None
         self._tokenizer = None
 
@@ -38,8 +41,9 @@ class HuggingFaceTeacher(Teacher):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
+        # trust_remote_code 会执行仓库内的自定义 Python 代码，仅对官方可信权重放行
         self._tokenizer = AutoTokenizer.from_pretrained(
-            self.model_name, trust_remote_code=True
+            self.model_name, trust_remote_code=self.trust_remote_code
         )
         if self._tokenizer.pad_token_id is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
@@ -47,7 +51,7 @@ class HuggingFaceTeacher(Teacher):
             self.model_name,
             torch_dtype=torch.bfloat16,
             device_map="auto",
-            trust_remote_code=True,
+            trust_remote_code=self.trust_remote_code,
         )
         self._model.eval()
 
@@ -81,17 +85,24 @@ def load_model_factory(
     top_p: float = 0.9,
     max_new_tokens: int = 1024,
     seed: int | None = None,
+    trust_remote_code: bool = False,
 ):
-    """返回一个 ``TeacherFactory``（``Task -> HuggingFaceTeacher``），供评测复用。"""
+    """返回一个 ``TeacherFactory``（``Task -> HuggingFaceTeacher``），供评测复用。
+
+    ``HuggingFaceTeacher.generate`` 不依赖具体任务，故在闭包外只构造一个实例，让同一组
+    内所有任务共享同一份已加载的模型——避免 400 条 benchmark 逐任务重复从磁盘加载权重。
+    """
+    teacher = HuggingFaceTeacher(
+        model_name_or_path,
+        temperature=temperature,
+        top_p=top_p,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        trust_remote_code=trust_remote_code,
+    )
 
     def factory(task):
-        return HuggingFaceTeacher(
-            model_name_or_path,
-            temperature=temperature,
-            top_p=top_p,
-            max_new_tokens=max_new_tokens,
-            seed=seed,
-        )
+        return teacher
 
     return factory
 

@@ -16,10 +16,11 @@ dependencies = [
 [project.optional-dependencies]
 env = ["fastapi", "uvicorn"]
 synth = ["openai"]
+mcp = ["mcp"]
 dev = ["pytest", "ruff"]
 
 [tool.setuptools.packages.find]
-include = ["envs*", "data*", "train*", "eval*"]
+include = ["envs*", "data*", "train*", "eval*", "serving*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

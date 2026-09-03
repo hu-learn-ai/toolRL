@@ -26,6 +26,10 @@ class GRPOConfig:
     max_steps: int = 500            # 训练步数上限（至 reward 平台期）
     # 精度 / 显存
     bf16: bool = True
+    report_to: str = "wandb"   # 训练日志上报后端；无 wandb 账号可改为 "none"
+    # 安全：是否信任模型仓库的自定义建模代码（transformers 的 trust_remote_code）。
+    # 开启会执行仓库内的任意 Python 代码，仅对官方可信权重（如 Qwen3）放行，默认关闭。
+    trust_remote_code: bool = False
 
 
 __all__ = ["GRPOConfig"]

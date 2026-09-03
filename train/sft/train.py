@@ -16,10 +16,12 @@ def load_model_tokenizer(cfg: SFTConfig):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(cfg.model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        cfg.model_name, trust_remote_code=cfg.trust_remote_code
+    )
     torch_dtype = torch.bfloat16 if cfg.bf16 else torch.float32
     model = AutoModelForCausalLM.from_pretrained(
-        cfg.model_name, torch_dtype=torch_dtype, trust_remote_code=True
+        cfg.model_name, torch_dtype=torch_dtype, trust_remote_code=cfg.trust_remote_code
     )
     if cfg.use_lora:
         from peft import LoraConfig, get_peft_model
@@ -77,7 +79,7 @@ def train(cfg: SFTConfig) -> None:
         save_strategy="epoch",
         eval_strategy="epoch",
         seed=cfg.seed,
-        report_to="wandb",
+        report_to=cfg.report_to,
     )
 
     trainer = Trainer(

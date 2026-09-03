@@ -28,7 +28,7 @@ class Text2SQLEnv(BaseToolEnv):
     def reset(self, task: Task) -> dict:
         """重置环境，返回观察（指令 + 工具 schema + 数据库列结构）。"""
         self._task = task
-        self._db = build_database(task.meta["db"])
+        self._db = build_database(task.meta.get("db", "ecommerce"))
         self._num_calls = 0
         self._done = False
         return {

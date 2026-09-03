@@ -27,6 +27,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-seq-len", type=int, default=4096)
     p.add_argument("--val-ratio", type=float, default=0.05)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--trust-remote-code", action="store_true",
+                   help="信任模型仓库的自定义建模代码（Qwen3 官方权重需开启；有任意代码执行风险）")
     args = p.parse_args(argv)
 
     cfg = SFTConfig.lora_17b() if args.lora else SFTConfig.full_06b()
@@ -40,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg.max_seq_len = args.max_seq_len
     cfg.val_ratio = args.val_ratio
     cfg.seed = args.seed
+    cfg.trust_remote_code = args.trust_remote_code
     if args.lr is not None:
         cfg.lr = args.lr
 

@@ -52,13 +52,15 @@ def load_policy(cfg: GRPOConfig):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(cfg.model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        cfg.model_name, trust_remote_code=cfg.trust_remote_code
+    )
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model_name,
         torch_dtype=torch.bfloat16 if cfg.bf16 else torch.float32,
-        trust_remote_code=True,
+        trust_remote_code=cfg.trust_remote_code,
     )
     return model, tokenizer
 
@@ -95,7 +97,7 @@ def train(cfg: GRPOConfig) -> None:
         bf16=cfg.bf16,
         logging_steps=10,
         seed=cfg.seed,
-        report_to="wandb",
+        report_to=cfg.report_to,
     )
 
     trainer = GRPOTrainer(

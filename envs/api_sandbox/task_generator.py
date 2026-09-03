@@ -24,6 +24,14 @@ from typing import Callable, Iterator
 from ..task_schema import Gold, Task, ToolCall, ToolSpec
 from .tools import TOOLS, call
 
+# 步数口径（见模块 docstring）：min_steps = 工具调用数 + 最终回答 1 步，max_steps 再留
+# _MARGIN_STEPS 步试错余量。
+_ANSWER_STEP = 1
+_MARGIN_STEPS = 3
+
+# 干扰工具默认注入概率（§5.1 干扰项维度）。
+DEFAULT_DISTRACTOR_RATIO = 0.3
+
 # ---------------------------------------------------------------------------
 # 槽位素材与取值
 # ---------------------------------------------------------------------------
@@ -99,9 +107,9 @@ def _build(
             calls=[ToolCall(api=c["api"], params=c["params"]) for c in gold_calls],
             answer=answer,
         ),
-        # 步数 = 助手回合 = 工具调用数 + 最终回答那一轮；max 再留 3 步试错余量
-        max_steps=len(gold_calls) + 4,
-        min_steps=len(gold_calls) + 1,
+        # 步数 = 助手回合 = 工具调用数 + 最终回答那一轮；max 再留 _MARGIN_STEPS 步试错
+        max_steps=len(gold_calls) + _ANSWER_STEP + _MARGIN_STEPS,
+        min_steps=len(gold_calls) + _ANSWER_STEP,
     )
 
 
@@ -401,7 +409,7 @@ def _distractors(used_apis: set[str], rng: random.Random) -> list[ToolSpec]:
     return [TOOLS[name].to_spec() for name in rng.sample(candidates, k=min(k, len(candidates)))]
 
 
-def generate_task(rng: random.Random, task_id: str, distractor_ratio: float = 0.3) -> Task:
+def generate_task(rng: random.Random, task_id: str, distractor_ratio: float = DEFAULT_DISTRACTOR_RATIO) -> Task:
     """按给定 RNG 生成单个任务；以 distractor_ratio 概率注入干扰工具。"""
     _, fn = rng.choice(TEMPLATES)
     task = fn(rng, task_id)
@@ -411,7 +419,7 @@ def generate_task(rng: random.Random, task_id: str, distractor_ratio: float = 0.
     return task
 
 
-def task_generator(seed: int, distractor_ratio: float = 0.3) -> Iterator[Task]:
+def task_generator(seed: int, distractor_ratio: float = DEFAULT_DISTRACTOR_RATIO) -> Iterator[Task]:
     """按 seed 确定性无限生成任务；配合 islice 取固定数量。"""
     rng = random.Random(seed)
     i = 0
@@ -420,6 +428,6 @@ def task_generator(seed: int, distractor_ratio: float = 0.3) -> Iterator[Task]:
         i += 1
 
 
-def generate_tasks(seed: int, n: int, distractor_ratio: float = 0.3) -> list[Task]:
+def generate_tasks(seed: int, n: int, distractor_ratio: float = DEFAULT_DISTRACTOR_RATIO) -> list[Task]:
     """生成固定数量 n 的任务（§7.1 gen_tasks 用）。"""
     return list(itertools.islice(task_generator(seed, distractor_ratio), n))

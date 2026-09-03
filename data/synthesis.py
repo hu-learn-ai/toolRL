@@ -63,6 +63,10 @@ def synthesize_one(task: Task, env: BaseToolEnv, teacher: Teacher) -> SynthesisR
     raw_turns: list[str] = []
     for _ in range(_MAX_SANITY):
         text = teacher.generate([m.model_dump() for m in messages])
+        if not isinstance(text, str):
+            # 兜底：teacher 返回 None / 非字符串（异常输出）按无效回合处理，避免
+            # Message(content=...) 触发 pydantic 校验崩溃
+            text = ""
         parsed = parse_turn(text)
         if parsed.kind == "tool_call":
             raw_turns.append(text)

@@ -19,6 +19,7 @@ from typing import Iterator
 from ..base_env import BaseToolEnv, JudgeResult
 from ..task_schema import Task
 from .judge import judge as _judge
+from .task_generator import DEFAULT_DISTRACTOR_RATIO
 from .task_generator import task_generator as _task_generator
 from .tools import call as _call
 
@@ -26,7 +27,7 @@ from .tools import call as _call
 class ApiSandboxEnv(BaseToolEnv):
     """模拟 API 沙箱环境。"""
 
-    def __init__(self, distractor_ratio: float = 0.3):
+    def __init__(self, distractor_ratio: float = DEFAULT_DISTRACTOR_RATIO):
         self._distractor_ratio = distractor_ratio
         self._task: Task | None = None
         self._num_calls = 0

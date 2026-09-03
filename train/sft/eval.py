@@ -68,14 +68,18 @@ def first_tool(trajectory: Trajectory) -> str | None:
     return None
 
 
+_ASCII_MAX = 128         # ord < 128 视为 ASCII 字符
+_CHARS_PER_TOKEN = 4     # ASCII 约 4 字符折 1 token（§5.2 粗略估算口径）
+
+
 def estimate_tokens(text: str) -> int:
     """无 tokenizer 的粗略 token 估算：CJK 按 1 字符、ASCII 按 4 字符折 1 token。
 
     仅用于 §5.2 的部署成本量级对比，非精确 tokenize。
     """
-    ascii_chars = sum(1 for c in text if ord(c) < 128)
+    ascii_chars = sum(1 for c in text if ord(c) < _ASCII_MAX)
     cjk_chars = len(text) - ascii_chars
-    return cjk_chars + (ascii_chars + 3) // 4
+    return cjk_chars + (ascii_chars + _CHARS_PER_TOKEN - 1) // _CHARS_PER_TOKEN
 
 
 class _Accumulator:
@@ -97,7 +101,8 @@ class _Accumulator:
         self.steps_sum += r.trajectory.steps
         self.fmt += 1 if r.judge.format == 1.0 else 0
         self.succ += 1 if r.judge.success else 0
-        self.tool += 1 if first_tool(r.trajectory) == task.gold.calls[0].api else 0
+        if task.gold.calls:  # 防御：gold.calls 为空时跳过工具准确率统计
+            self.tool += 1 if first_tool(r.trajectory) == task.gold.calls[0].api else 0
         self.matched_params += r.judge.matched_params
         self.param_total += r.judge.param_total
         self.reward_sum += total_reward(r.judge, weights)
