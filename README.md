@@ -111,7 +111,7 @@ pytest
 | SFT train/sft/ | ✅ 完成 | 0.6B 全参 / 1.7B LoRA，assistant loss 掩码，训练/验证指标 |
 | GRPO train/grpo/ | 🚧 进行中 | 奖励函数与 TRL 入口就绪；verl 多轮集成待做 |
 | 评测 eval/ | ✅ 完成 | 400 条 benchmark、四组对比报告、无 GPU 冒烟 |
-| 部署 serving/ | ✅ 完成（代码 + 文档） | MCP stdio Server + 最小 Agent Runtime + FastAPI HTTP（`/chat/{model}`）+ Dockerfile + docker-compose + `docs/deploy_zh.md`；本机 teacher 模式端到端冒烟通过，等 GPU 实例验证真模型 |
+| 部署 serving/ | ✅ 完成（代码 + 文档；真模型已验证） | MCP stdio Server + 最小 Agent Runtime + FastAPI HTTP（`/chat/{model}`）+ Dockerfile + docker-compose + `docs/deploy_zh.md`；本机 teacher 模式端到端冒烟通过；`/chat/sft` 与 `/chat/grpo_v3` 真模型推理已于 2026-09-09 在阿里云按量 GPU 实例上 curl 验证通过（各 3 步跑通）。该实例已释放，当前无线上服务，需重新部署时按 `docs/deploy_zh.md` 执行 |
 | 工程化 | ✅ 完成 | git、CI（pytest+ruff+冒烟）、中英 README、Apache-2.0 |
 
 ## 路线图

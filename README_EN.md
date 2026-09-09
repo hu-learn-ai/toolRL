@@ -116,7 +116,7 @@ pytest
 | train/sft/ | ✅ Done | 0.6B full / 1.7B LoRA, assistant loss masking, train/eval metrics |
 | train/grpo/ | 🚧 WIP | reward functions + TRL entry ready; verl multi-turn integration pending |
 | eval/ | ✅ Done | 400-task benchmark, 4-group report, no-GPU mock mode |
-| serving/ | ✅ Done (code + docs) | MCP stdio Server + minimal Agent Runtime + FastAPI HTTP (`/chat/{model}`) + Dockerfile + docker-compose + `docs/deploy_zh.md`; teacher-mode end-to-end smoke passed locally, real-model GPU validation pending |
+| serving/ | ✅ Done (code + docs; real-model validated) | MCP stdio Server + minimal Agent Runtime + FastAPI HTTP (`/chat/{model}`) + Dockerfile + docker-compose + `docs/deploy_zh.md`; teacher-mode end-to-end smoke passed locally; real-model inference for both `/chat/sft` and `/chat/grpo_v3` was validated via curl on an Aliyun pay-as-you-go GPU instance on 2026-09-09 (each completed a 3-step run). The instance has since been released, so no live service is currently running; redeploy by following `docs/deploy_zh.md` |
 | Engineering | ✅ Done | git, CI (pytest+ruff+smoke), bilingual README, Apache-2.0 |
 
 ## Roadmap
