@@ -71,12 +71,18 @@ class HuggingFaceTeacher(Teacher):
             do_sample=True,
         )
         if self.seed is not None:
-            gen_kwargs["generator"] = torch.Generator(
-                device=self._model.device
-            ).manual_seed(self.seed)
+            # 新版 transformers 的 generate() 不接受 generator= kwarg（会被
+            # _validate_model_kwargs 拒绝），改用全局播种保证同 seed 可复现
+            torch.manual_seed(self.seed)
         out = self._model.generate(**inputs, **gen_kwargs)
         new = out[0][inputs["input_ids"].shape[-1]:]
-        return self._tokenizer.decode(new, skip_special_tokens=True)
+        # skip_special_tokens=False + 手动剥离终止符：对 Qwen3-0.6B 实测，
+        # <tool_call>/<think> 的 special=False（skip=True 也不会剥掉它们），但
+        # 显式保留 + 手动去 <|im_end|> 的写法不依赖 tokenizer 版本行为，更稳。
+        text = self._tokenizer.decode(new, skip_special_tokens=False)
+        for stop in ("<|im_end|>", "<|endoftext|>"):
+            text = text.replace(stop, "")
+        return text.strip()
 
 
 def load_model_factory(

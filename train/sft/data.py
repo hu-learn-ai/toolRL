@@ -55,12 +55,14 @@ def compute_labels(input_ids: list[int], messages: list[dict], tokenizer) -> lis
             continue
         start = len(
             tokenizer.apply_chat_template(
-                messages[:i], tokenize=True, add_generation_prompt=True
+                messages[:i], tokenize=True, add_generation_prompt=True,
+                return_dict=False,
             )
         )
         end = len(
             tokenizer.apply_chat_template(
-                messages[: i + 1], tokenize=True, add_generation_prompt=False
+                messages[: i + 1], tokenize=True, add_generation_prompt=False,
+                return_dict=False,
             )
         )
         labels[start:end] = input_ids[start:end]
@@ -81,7 +83,10 @@ class SFTDataCollator:
         rows = []
         for f in features:
             messages = f["messages"]
-            ids = self.tokenizer.apply_chat_template(messages, tokenize=True)
+            # transformers 5.x 默认返回 BatchEncoding，这里显式要 list[int]
+            ids = self.tokenizer.apply_chat_template(
+                messages, tokenize=True, return_dict=False
+            )
             labels = compute_labels(ids, messages, self.tokenizer)
             rows.append((ids[: self.max_seq_len], labels[: self.max_seq_len]))
 

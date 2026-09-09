@@ -10,13 +10,30 @@ GPU 侧依赖（torch/transformers/trl/datasets）均延迟到函数内导入，
 
 from __future__ import annotations
 
+import inspect
+
 from envs.api_sandbox import judge as api_judge
 from envs.task_schema import Task
 from envs.text2sql import judge as sql_judge
 
 from .config import GRPOConfig
 from .prompt import build_prompt, extract_task_id
-from .reward import total_reward
+from .reward import first_turn_reward, total_reward
+
+# torch 2.5.1+cu124 的 wheel 缺 FSDPModule export，而 trl 1.12 顶层 import 会用到。
+# 必须在 trl 首次被 import 之前补上（trl 在 train() 内延迟 import，这里顶层打补丁）。
+# try/except 保护：无 torch 的环境（纯单测机）import 本模块不炸。
+try:
+    import torch.distributed.fsdp as _fsdp_pkg
+
+    if not hasattr(_fsdp_pkg, "FSDPModule"):
+        from torch.distributed.fsdp.fully_sharded_data_parallel import (
+            FullyShardedDataParallel as _FSDP_legacy,
+        )
+
+        _fsdp_pkg.FSDPModule = _FSDP_legacy
+except ImportError:
+    pass
 
 
 def judge_for_task(task: Task, trajectory: list[dict]):
@@ -29,19 +46,26 @@ def judge_for_task(task: Task, trajectory: list[dict]):
 def make_reward_func(task_map: dict[str, Task]):
     """构造 TRL 风格奖励函数 ``(prompts, completions) -> rewards``（单轮判定）。
 
-    说明：单轮把每个 completion 当一条 assistant 响应交给 judge；多轮工具任务的
-    完整判定请走 verl + ``RewardManager``。
+    说明：api 任务用 ``first_turn_reward``（只评第一回合 tool_call，上限 0.7，
+    杜绝"跳过工具直接 answer 得 0.6"的 hacking 向量，见 reward.py 文档字符串）；
+    sql 任务暂沿用完整 judge 的单轮简化。多轮工具任务的完整判定请走 verl +
+    ``RewardManager``。
     """
 
-    def reward_func(prompts: list[str], completions: list[str]) -> list[float]:
+    def reward_func(
+        prompts: list[str], completions: list[str], **kwargs
+    ) -> list[float]:
         rewards = []
         for prompt, completion in zip(prompts, completions):
             task = task_map.get(extract_task_id(prompt) or "")
             if task is None:
                 rewards.append(0.0)
                 continue
-            jr = judge_for_task(task, [{"raw": completion}])
-            rewards.append(total_reward(jr))
+            if task.task_id.startswith("sql_"):
+                jr = judge_for_task(task, [{"raw": completion}])
+                rewards.append(total_reward(jr))
+            else:
+                rewards.append(first_turn_reward(task, completion))
         return rewards
 
     return reward_func
@@ -61,6 +85,7 @@ def load_policy(cfg: GRPOConfig):
         cfg.model_name,
         torch_dtype=torch.bfloat16 if cfg.bf16 else torch.float32,
         trust_remote_code=cfg.trust_remote_code,
+        attn_implementation="sdpa",
     )
     return model, tokenizer
 
@@ -83,17 +108,25 @@ def train(cfg: GRPOConfig) -> None:
 
     model, tokenizer = load_policy(cfg)
 
+    # TRL 要求 batch size 与 num_generations 对齐（否则报"不能整除"），
+    # 这里让 per_device batch = G，梯度累积补足到约 num_prompts 条 prompt。
+    per_device_batch = cfg.group_size
     trl_args = TRLGRPOConfig(
         output_dir=cfg.output_dir,
         num_generations=cfg.group_size,          # G = 8
         max_completion_length=cfg.max_response_len,
-        max_prompt_length=cfg.max_prompt_len,
+        # 注意：trl 1.12.0 已移除 max_prompt_length，超长靠 tokenizer 截断兜底
         learning_rate=cfg.lr,
         beta=cfg.beta,                           # KL 系数
-        epsilon=cfg.epsilon,                     # clip 系数
-        per_device_train_batch_size=1,           # 每 prompt 组内 G 条
-        gradient_accumulation_steps=cfg.num_prompts // 1,  # 每轮约 num_prompts 条 prompt
-        num_train_epochs=1,
+        epsilon=cfg.epsilon,                     # clip 系数（下界）
+        epsilon_high=cfg.epsilon,                # clip 上界（对称 clip）
+        per_device_train_batch_size=per_device_batch,
+        gradient_accumulation_steps=max(1, cfg.num_prompts // per_device_batch),
+        num_train_epochs=cfg.epochs,
+        gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
+        mask_truncated_completions=True,         # 被截断的 rollout 不计入 loss
+        log_completions=False,
         bf16=cfg.bf16,
         logging_steps=10,
         seed=cfg.seed,
@@ -107,6 +140,15 @@ def train(cfg: GRPOConfig) -> None:
         train_dataset=dataset,
         reward_funcs=make_reward_func(task_map),
     )
+    # transformers 4.49+ 的 Trainer 会调用 self._get_train_sampler(dataset)，
+    # 而 trl 0.16 的方法签名只有 self；仅在旧签名下包一层兼容（忽略 dataset）。
+    if len(inspect.signature(type(trainer)._get_train_sampler).parameters) == 1:
+        _orig_sampler = trainer._get_train_sampler
+
+        def _sampler_compat(_dataset=None):
+            return _orig_sampler()
+
+        trainer._get_train_sampler = _sampler_compat
     trainer.train()
     trainer.save_model(cfg.output_dir)
     tokenizer.save_pretrained(cfg.output_dir)

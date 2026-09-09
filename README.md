@@ -87,6 +87,10 @@ uvicorn envs.api_sandbox.server:app --host 127.0.0.1 --port 8000
 
 # 启动 MCP Server（stdio）
 python -m serving --mcp
+
+# 启动 FastAPI HTTP 服务（云端部署主入口）
+python -m serving --http --host 0.0.0.0 --port 8000
+# 详见 docs/deploy_zh.md
 ```
 
 > ⚠️ **安全提示**：Mock API 沙箱（`envs/api_sandbox/server.py`）与 MCP Server（`python -m serving --mcp`）
@@ -107,7 +111,7 @@ pytest
 | SFT train/sft/ | ✅ 完成 | 0.6B 全参 / 1.7B LoRA，assistant loss 掩码，训练/验证指标 |
 | GRPO train/grpo/ | 🚧 进行中 | 奖励函数与 TRL 入口就绪；verl 多轮集成待做 |
 | 评测 eval/ | ✅ 完成 | 400 条 benchmark、四组对比报告、无 GPU 冒烟 |
-| 部署 serving/ | 🚧 未开始 | MCP Server + Agent Runtime 待实现 |
+| 部署 serving/ | ✅ 完成（代码 + 文档） | MCP stdio Server + 最小 Agent Runtime + FastAPI HTTP（`/chat/{model}`）+ Dockerfile + docker-compose + `docs/deploy_zh.md`；本机 teacher 模式端到端冒烟通过，等 GPU 实例验证真模型 |
 | 工程化 | ✅ 完成 | git、CI（pytest+ruff+冒烟）、中英 README、Apache-2.0 |
 
 ## 路线图

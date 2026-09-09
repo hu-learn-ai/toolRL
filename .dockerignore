@@ -1,0 +1,40 @@
+# Git / 元数据
+.git
+.gitignore
+.github
+
+# 大文件与训练产物（避免镜像构建上下文膨胀）
+*.tar.gz
+*.tgz
+*.zip
+*.safetensors
+*.bin
+*.pt
+*.pth
+checkpoints/
+artifacts/
+data_out/
+data_out_min/
+runs/
+wandb/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# 本地环境与工具状态
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+.workbuddy/
+
+# 测试与文档不进构建上下文（Dockerfile 只 COPY 运行所需目录）
+tests/
+docs/
+ToolRL-Lite项目立项文档.md

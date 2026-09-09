@@ -75,8 +75,42 @@ class RewardManager:
         return group_advantages(self.score_group(task, teacher_factory, group_size))
 
 
+def first_turn_reward(
+    task: Task, completion: str, weights: dict[str, float] | None = None
+) -> float:
+    """TRL 单轮路径专用奖励：只评第一回合 tool_call，不要求轨迹终态 ``<answer>``。
+
+    为什么不能用完整 judge：``_judge_format`` 要求轨迹恰好以一个 ``<answer>`` 收尾，
+    单轮 completion 永远给不出（工具结果要等环境回传）。若沿用完整 judge：
+    - 正确的 tool_call 上限只有 ``w_correct = 0.3``（format/answer 恒 0）；
+    - 而"跳过工具、直接输出含 gold 事实的 ``<answer>``"反而可得 ``0.4 + 0.2 = 0.6``
+      ——负向激励（reward hacking 向量），加大 lr 后策略会学会不调工具。
+
+    单轮路径改为：格式（合法 tool_call + schema 校验通过）+ 首步对齐（API 名与
+    参数对 gold 调用逐条比对、分级给分），answer 维度一律 0。上限 0.7。
+    完整的多轮闭环判定仍由 verl 侧 ``RewardManager`` 承担。
+    """
+    from envs.api_sandbox.common import validate_params
+    from envs.api_sandbox.judge import _judge_correct, _schema_of, parse_turn
+
+    w = weights or DEFAULT_REWARD_WEIGHTS
+    p = parse_turn(completion)
+    if p.kind != "tool_call":
+        # answer / invalid 在单轮路径一律 0 分：第一回合就该调工具
+        return 0.0
+    schema = _schema_of(p.tool_name)
+    fmt = (
+        1.0
+        if (schema is not None and validate_params(p.arguments, schema) is None)
+        else 0.0
+    )
+    r_correct, _, _ = _judge_correct(task, [p])
+    return w["format"] * fmt + w["correct"] * r_correct
+
+
 __all__ = [
     "total_reward",
+    "first_turn_reward",
     "group_advantages",
     "compute_trajectory_reward",
     "RewardManager",

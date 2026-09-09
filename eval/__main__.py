@@ -57,6 +57,11 @@ def main(argv: list[str] | None = None) -> int:
 
     groups: dict = {}
     if args.mock:
+        # --mock 会静默忽略 --base/--sft/--grpo（全部用 _BadTeacher 顶替），
+        # 两者同时出现大概率是误用，显式告警避免拿到"全 0%"报告却以为是真模型成绩
+        if args.base or args.sft or args.grpo:
+            print("[eval][警告] --mock 模式忽略模型路径，三组均用 _BadTeacher，"
+                  "报告不代表真实模型成绩！", file=sys.stderr)
         bad = lambda task: _BadTeacher()  # noqa: E731
         for name, path in (("基座", args.base), ("SFT", args.sft), ("GRPO", args.grpo)):
             groups[name] = bad

@@ -36,7 +36,7 @@ sandbox       trajectories      optimization
 │   ├── sft/             # SFT cold-start (0.6B full / 1.7B LoRA)
 │   └── grpo/            # GRPO RL (reward functions + TRL/verl entry)
 ├── eval/                # Self-built benchmark + 4-group comparison report
-├── serving/             # MCP Server + Agent Runtime (WIP)
+├── serving/             # MCP Server + Agent Runtime + FastAPI HTTP
 ├── scripts/             # gen_tasks.py / gen_sft.py / run_all.sh
 └── .github/workflows/   # CI (pytest + ruff + eval smoke)
 ```
@@ -90,6 +90,10 @@ uvicorn envs.api_sandbox.server:app --host 127.0.0.1 --port 8000
 
 # Start the MCP Server (stdio)
 python -m serving --mcp
+
+# Start the FastAPI HTTP service (main cloud-deployment entry)
+python -m serving --http --host 0.0.0.0 --port 8000
+# See docs/deploy_zh.md
 ```
 
 > ⚠️ **Security note**: the mock API sandbox (`envs/api_sandbox/server.py`) and the MCP Server
@@ -112,7 +116,7 @@ pytest
 | train/sft/ | ✅ Done | 0.6B full / 1.7B LoRA, assistant loss masking, train/eval metrics |
 | train/grpo/ | 🚧 WIP | reward functions + TRL entry ready; verl multi-turn integration pending |
 | eval/ | ✅ Done | 400-task benchmark, 4-group report, no-GPU mock mode |
-| serving/ | 🚧 TODO | MCP Server + Agent Runtime |
+| serving/ | ✅ Done (code + docs) | MCP stdio Server + minimal Agent Runtime + FastAPI HTTP (`/chat/{model}`) + Dockerfile + docker-compose + `docs/deploy_zh.md`; teacher-mode end-to-end smoke passed locally, real-model GPU validation pending |
 | Engineering | ✅ Done | git, CI (pytest+ruff+smoke), bilingual README, Apache-2.0 |
 
 ## Roadmap

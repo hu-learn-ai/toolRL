@@ -4,6 +4,8 @@
 （std=0 防除零）、以及 rollout 奖励（GoldTeacher 全对 / BadTeacher 全错）。
 """
 
+import json
+
 import pytest
 
 from data import GoldTeacher
@@ -126,12 +128,25 @@ def test_build_prompt_roundtrip():
 
 
 def test_make_reward_func_single_turn():
-    task = api_tasks(0, 1)[0]
+    # 固定取单 gold 调用任务（weather.forecast），方便对第一回合 tool_call 精确断言
+    task = api_tasks(2, 1)[0]
+    assert len(task.gold.calls) == 1
     rf = make_reward_func({task.task_id: task})
     prompt = build_prompt(task)
+
+    # 单轮 answer：第一回合就该调工具（防 reward hacking），不给工具调用一律 0 分
     rewards = rf([prompt], ["<answer>ok</answer>"])
-    # 单轮 answer：format=1（api_sandbox 不强制 tool_call），correct/answer=0 → 0.40
-    assert rewards[0] == pytest.approx(0.40)
+    assert rewards[0] == pytest.approx(0.0)
+
+    # 单轮正确 tool_call：format=1 + first-turn correct=1 → 0.40 + 0.30 = 0.70
+    c = task.gold.calls[0]
+    tool_raw = (
+        "<tool_call>"
+        + json.dumps({"name": c.api, "arguments": c.params}, ensure_ascii=False)
+        + "</tool_call>"
+    )
+    rewards = rf([prompt], [tool_raw])
+    assert rewards[0] == pytest.approx(0.70)
 
 
 def test_judge_for_task_dispatches_text2sql():

@@ -1,9 +1,10 @@
-"""部署 CLI（design_zh.md §7.1 serve 阶段）。
+"""部署 CLI（design_zh.md §6）。
 
-两种模式：
+三种模式：
 
     python -m serving --mcp                 # stdio 启动 MCP 工具服务器（§6.1）
     python -m serving --task-seed 0         # 用 GoldTeacher 演示最小 Agent Runtime（§6.2）
+    python -m serving --http                # FastAPI HTTP 服务，监听 0.0.0.0:8000（§6.3）
 """
 
 from __future__ import annotations
@@ -31,9 +32,23 @@ def _demo_agent(registry: ToolRegistry, seed: int, idx: int) -> int:
     return 0
 
 
+def _serve_http(host: str, port: int) -> int:
+    import uvicorn
+    uvicorn.run(
+        "serving.api:app",
+        host=host,
+        port=port,
+        log_level="info",
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="部署（§6）：MCP Server / Agent Runtime")
+    p = argparse.ArgumentParser(description="部署（§6）：MCP Server / Agent Runtime / HTTP")
     p.add_argument("--mcp", action="store_true", help="stdio 启动 MCP 工具服务器")
+    p.add_argument("--http", action="store_true", help="FastAPI HTTP 服务（云端部署主入口）")
+    p.add_argument("--host", default="0.0.0.0", help="HTTP 监听地址，默认 0.0.0.0")
+    p.add_argument("--port", type=int, default=8000, help="HTTP 监听端口，默认 8000")
     p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, help="工具调用超时秒数")
     p.add_argument("--task-seed", type=int, default=0, help="agent 演示任务 seed")
     p.add_argument("--task-idx", type=int, default=0, help="agent 演示任务下标")
@@ -44,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.mcp:
         asyncio.run(run_stdio(registry))
         return 0
+    if args.http:
+        return _serve_http(args.host, args.port)
 
     return _demo_agent(registry, args.task_seed, args.task_idx)
 

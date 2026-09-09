@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 from .config import SFTConfig
 from .data import SFTDataCollator, load_trajectories, to_chat_messages, train_val_split
 
@@ -65,14 +67,16 @@ def train(cfg: SFTConfig) -> None:
     train_ds = _to_dataset(train_trajs, tokenizer)
     val_ds = _to_dataset(val_trajs, tokenizer)
 
-    args = TrainingArguments(
+    ta_params = inspect.signature(TrainingArguments.__init__).parameters
+    args_kwargs = dict(
         output_dir=cfg.output_dir,
         num_train_epochs=cfg.epochs,
         per_device_train_batch_size=cfg.batch_size,
         per_device_eval_batch_size=cfg.batch_size,
+        # collator 需要原始 messages 列自行转 token，阻止 Trainer 预先删列
+        remove_unused_columns=False,
         gradient_accumulation_steps=cfg.grad_accum,
         learning_rate=cfg.lr,
-        warmup_ratio=cfg.warmup_ratio,
         lr_scheduler_type="cosine",
         bf16=cfg.bf16,
         logging_steps=10,
@@ -81,14 +85,24 @@ def train(cfg: SFTConfig) -> None:
         seed=cfg.seed,
         report_to=cfg.report_to,
     )
+    # transformers 5.x 部分版本移除了 warmup_ratio 字段，只在该参数存在时传入，
+    # 兼容 4.x 与 5.x（缺失时按无 warmup 处理，不影响训练启动）。
+    if "warmup_ratio" in ta_params:
+        args_kwargs["warmup_ratio"] = cfg.warmup_ratio
+    args = TrainingArguments(**args_kwargs)
 
+    # transformers 5.x 把 tokenizer 参数改名为 processing_class，按版本兼容。
+    trainer_kwargs = {"data_collator": SFTDataCollator(tokenizer, cfg.max_seq_len)}
+    if "processing_class" in inspect.signature(Trainer.__init__).parameters:
+        trainer_kwargs["processing_class"] = tokenizer
+    else:
+        trainer_kwargs["tokenizer"] = tokenizer
     trainer = Trainer(
         model=model,
         args=args,
         train_dataset=train_ds,
         eval_dataset=val_ds,
-        data_collator=SFTDataCollator(tokenizer, cfg.max_seq_len),
-        tokenizer=tokenizer,
+        **trainer_kwargs,
     )
     trainer.train()
     trainer.save_model(cfg.output_dir)

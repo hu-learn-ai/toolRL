@@ -36,7 +36,9 @@ class FakeTokenizer:
             self._next += 1
         return self._words[w]
 
-    def apply_chat_template(self, messages, tokenize=True, add_generation_prompt=False):
+    def apply_chat_template(
+        self, messages, tokenize=True, add_generation_prompt=False, return_dict=True
+    ):
         ids = []
         for m in messages:
             ids.append(self.ROLE_IDS[m["role"]])

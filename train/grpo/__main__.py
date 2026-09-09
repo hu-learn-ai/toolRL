@@ -23,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--beta", type=float, default=0.04, help="KL 系数")
     p.add_argument("--epsilon", type=float, default=0.2, help="clip 系数")
     p.add_argument("--num-prompts", type=int, default=128)
+    p.add_argument("--epochs", type=int, default=1, help="训练轮数（正式跑建议 2-3）")
     p.add_argument("--max-steps", type=int, default=500)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--trust-remote-code", action="store_true",
@@ -38,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
         beta=args.beta,
         epsilon=args.epsilon,
         num_prompts=args.num_prompts,
+        epochs=args.epochs,
         max_steps=args.max_steps,
         seed=args.seed,
         trust_remote_code=args.trust_remote_code,

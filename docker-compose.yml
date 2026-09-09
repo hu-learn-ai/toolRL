@@ -1,0 +1,57 @@
+# 阿里云 GPU 实例 / 自有 GPU 服务器部署
+#
+# 使用：
+#   1. 把 checkpoints/ 传到服务器 /opt/toolrl-lite/checkpoints/
+#   2. 把项目源码（不含 checkpoints）传到 /opt/toolrl-lite/src/，或 git clone
+#   3. cd /opt/toolrl-lite && docker compose up -d
+#   4. curl http://<host>:8000/health 验证
+#
+# 反向代理 / HTTPS 由用户自配（Nginx / Caddy / SLB），不在本 compose 范围内。
+
+services:
+  serving:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: toolrl-lite-serving:latest
+    container_name: toolrl-serving
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    environment:
+      CHECKPOINT_SFT: /app/checkpoints/sft
+      CHECKPOINT_GRPO_V3: /app/checkpoints/grpo_v3
+      SERVING_TEMPERATURE: "0.7"
+      SERVING_MAX_NEW_TOKENS: "1024"
+      # 设为 1 启动时预热（避免首请求 latency 爆炸）；首次启动多耗 1-2 分钟
+      SERVING_WARMUP: "${SERVING_WARMUP:-0}"
+      HF_ENDPOINT: https://hf-mirror.com
+      HF_HUB_DISABLE_XET: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      # 可选：阿里云内网 DeepSeek teacher 用于数据合成（不在 serving 路径里，留作兼容）
+      # DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+    volumes:
+      - ./checkpoints:/app/checkpoints:ro
+      # Triton JIT 内核缓存：避免每次重建容器后首请求重新编译（30~90s）
+      - triton_cache:/root/.triton
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 180s   # 0.6B 加载 + warmup 最多 3 分钟
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  triton_cache:

@@ -23,6 +23,7 @@ class GRPOConfig:
     max_prompt_len: int = 2048
     max_response_len: int = 1024
     num_prompts: int = 128          # 每轮 prompt 数（128 × 8 = 1024 条轨迹）
+    epochs: int = 1                 # 训练轮数（冒烟 1 轮；正式跑建议 2-3）
     max_steps: int = 500            # 训练步数上限（至 reward 平台期）
     # 精度 / 显存
     bf16: bool = True
