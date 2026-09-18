@@ -31,14 +31,17 @@ def total_reward(jr: JudgeResult, weights: dict[str, float] | None = None) -> fl
 
 
 def group_advantages(rewards: list[float]) -> list[float]:
-    """组内相对优势（DeepSeekMath）：A_i = (r_i − mean) / std；std=0 → 全 0。"""
+    """组内相对优势（DeepSeekMath）：A_i = (r_i − mean) / std；std≈0 → 全 0。"""
     if not rewards:
         return []
-    mean = sum(rewards) / len(rewards)
-    var = sum((r - mean) ** 2 for r in rewards) / len(rewards)
+    n = len(rewards)
+    mean = sum(rewards) / n
+    var = sum((r - mean) ** 2 for r in rewards) / n
     std = var ** 0.5
-    if std == 0.0:
-        return [0.0] * len(rewards)
+    # 容差判定：避免浮点 sqrt 微小误差时被除零路径跳过；同时防止未来 std=1e-300
+    # 这种诡异值进入除法分支。
+    if std < 1e-9:
+        return [0.0] * n
     return [(r - mean) / std for r in rewards]
 
 

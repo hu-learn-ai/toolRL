@@ -96,7 +96,10 @@ def test_reward_manager_advantages_gold_identical():
     rm = RewardManager(env)
     adv = rm.advantages(task, GoldTeacher, group_size=8)
     # 黄金轨迹 8 条全同 → std=0 → 优势全 0
-    assert adv == [0.0] * 8
+    assert len(adv) == 8
+    assert all(x == 0.0 for x in adv), f"expected all-zero advantages, got {adv}"
+    # 防 list 渲染混淆：组内标准化定义上 sum(A_i) 必 = 0；任何 sum 不为 0 都是 bug
+    assert sum(adv) == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
