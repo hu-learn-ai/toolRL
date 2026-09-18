@@ -35,3 +35,7 @@ data_out/
 .workbuddy/
 data_out_min/
 /eval_out/
+
+# 临时探测 / 调试残留（项目内 ad-hoc 目录，避免误入仓）
+.probe_tmp/
+artifacts/checkpoints/
